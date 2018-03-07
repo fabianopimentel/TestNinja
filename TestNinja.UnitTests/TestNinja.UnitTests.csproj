@@ -53,6 +53,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="FakeFileReader.cs" />
+    <Compile Include="Mocking\VideoServiceTests.cs" />
     <Compile Include="StackTests.cs" />
     <Compile Include="CustomerControllerTests.cs" />
     <Compile Include="DemeritPointsCalculatorTests.cs" />
