@@ -6,20 +6,35 @@ using System.Text;
 
 namespace TestNinja.Mocking
 {
-    public static class HousekeeperHelper
+    public class HousekeeperHelper
     {
-        private static readonly UnitOfWork UnitOfWork = new UnitOfWork();
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IStatementGenerator _statementGenerator;
+        private readonly IEmailSender _emailSender;
+        private readonly IXtraMessageBox _messageBox;
 
-        public static bool SendStatementEmails(DateTime statementDate)
+        public HousekeeperHelper(
+            IUnitOfWork unitOfWork,
+            IStatementGenerator statementGenerator,
+            IEmailSender emailSender,
+            IXtraMessageBox messageBox)
         {
-            var housekeepers = UnitOfWork.Query<Housekeeper>();
+            _unitOfWork = unitOfWork;
+            _statementGenerator = statementGenerator;
+            _emailSender = emailSender;
+            _messageBox = messageBox;
+        }
+
+        public void SendStatementEmails(DateTime statementDate)
+        {
+            var housekeepers = _unitOfWork.Query<Housekeeper>();
 
             foreach (var housekeeper in housekeepers)
             {
                 if (housekeeper.Email == null)
                     continue;
 
-                var statementFilename = SaveStatement(housekeeper.Oid, housekeeper.FullName, statementDate);
+                var statementFilename = _statementGenerator.SaveStatement(housekeeper.Oid, housekeeper.FullName, statementDate);
 
                 if (string.IsNullOrWhiteSpace(statementFilename))
                     continue;
@@ -29,66 +44,16 @@ namespace TestNinja.Mocking
 
                 try
                 {
-                    EmailFile(emailAddress, emailBody, statementFilename,
+                    _emailSender.EmailFile(emailAddress, emailBody, statementFilename,
                         string.Format("Sandpiper Statement {0:yyyy-MM} {1}", statementDate, housekeeper.FullName));
                 }
                 catch (Exception e)
                 {
-                    XtraMessageBox.Show(e.Message, string.Format("Email failure: {0}", emailAddress),
+                    _messageBox.Show(e.Message, string.Format("Email failure: {0}", emailAddress),
                         MessageBoxButtons.OK);
                 }
             }
-
-            return true;
-        }
-
-        private static string SaveStatement(int housekeeperOid, string housekeeperName, DateTime statementDate)
-        {
-            var report = new HousekeeperStatementReport(housekeeperOid, statementDate);
-
-            if (!report.HasData)
-                return string.Empty;
-
-            report.CreateDocument();
-
-            var filename = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                string.Format("Sandpiper Statement {0:yyyy-MM} {1}.pdf", statementDate, housekeeperName));
-
-            report.ExportToPdf(filename);
-
-            return filename;
-        }
-
-        private static void EmailFile(string emailAddress, string emailBody, string filename, string subject)
-        {
-            var client = new SmtpClient(SystemSettingsHelper.EmailSmtpHost)
-            {
-                Port = SystemSettingsHelper.EmailPort,
-                Credentials =
-                    new NetworkCredential(
-                        SystemSettingsHelper.EmailUsername,
-                        SystemSettingsHelper.EmailPassword)
-            };
-
-            var from = new MailAddress(SystemSettingsHelper.EmailFromEmail, SystemSettingsHelper.EmailFromName,
-                Encoding.UTF8);
-            var to = new MailAddress(emailAddress);
-
-            var message = new MailMessage(from, to)
-            {
-                Subject = subject,
-                SubjectEncoding = Encoding.UTF8,
-                Body = emailBody,
-                BodyEncoding = Encoding.UTF8
-            };
-
-            message.Attachments.Add(new Attachment(filename));
-            client.Send(message);
-            message.Dispose();
-
-            File.Delete(filename);
-        }
+        }               
     }
 
     public enum MessageBoxButtons
@@ -96,9 +61,9 @@ namespace TestNinja.Mocking
         OK
     }
 
-    public class XtraMessageBox
+    public class XtraMessageBox : IXtraMessageBox
     {
-        public static void Show(string s, string housekeeperStatements, MessageBoxButtons ok)
+        public void Show(string s, string housekeeperStatements, MessageBoxButtons ok)
         {
         }
     }
